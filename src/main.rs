@@ -1,7 +1,6 @@
 pub mod send;
 pub mod receive;
 pub mod display;
-pub mod transfer;
 pub mod protocol;
 
 use receive::Receiver;
