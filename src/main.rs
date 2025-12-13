@@ -1,5 +1,4 @@
 pub mod display;
-
 use clap::Parser;
 use transfer::{
     cli::{Cli, Commands},
