@@ -1,9 +1,12 @@
 use crate::transfer_protocol::send_protocol::SendProtocol;
-use std::{path::PathBuf, time::Instant};
-use tokio::net::{TcpStream, ToSocketAddrs};
+use std::{
+    net::{TcpStream, ToSocketAddrs},
+    path::PathBuf,
+    time::Instant,
+};
 use walkdir::WalkDir;
 
-pub async fn handle_send(addr: impl ToSocketAddrs, send_path: &str) {
+pub fn handle_send(addr: impl ToSocketAddrs, send_path: &str) {
     let start_time = Instant::now();
 
     let send_path = PathBuf::from(send_path);
@@ -11,7 +14,7 @@ pub async fn handle_send(addr: impl ToSocketAddrs, send_path: &str) {
         panic!("需要发送的路径{}不存在", send_path.display());
     }
 
-    let stream = TcpStream::connect(addr).await.unwrap();
+    let stream = TcpStream::connect(addr).unwrap();
 
     let mut stream = SendProtocol::new(stream);
 
@@ -23,8 +26,8 @@ pub async fn handle_send(addr: impl ToSocketAddrs, send_path: &str) {
         let entry = entry.unwrap();
         let path = entry.path();
 
-        stream.send_file_or_dir(path, root_dir).await;
+        stream.send_file_or_dir(path, root_dir);
     }
-    stream.flush().await;
+    stream.flush();
     tracing::debug!("发送任务完成，耗时: {:?}", start_time.elapsed());
 }

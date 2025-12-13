@@ -19,7 +19,7 @@ pub fn handle_receive(addr: impl ToSocketAddrs, output_path: &str) {
         let (stream, a) = stream.accept().unwrap();
         tracing::debug!("新连接：{}", a);
 
-        tokio::spawn(async move {
+        std::thread::spawn(move || {
             let mut stream = ReceiveProtocol::new(stream);
             stream.receive_file_or_dir(&output_path);
             tracing::debug!("接收任务完成");
