@@ -20,7 +20,7 @@ async fn main() {
         }
         Commands::Receive(args) => {
             let addr = format!("127.0.0.1:{}", args.port);
-            handle_receive(addr, &args.output_dir).await;
+            handle_receive(addr, &args.output_dir);
         }
     }
 }
