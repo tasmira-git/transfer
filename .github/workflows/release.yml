@@ -1,97 +1,96 @@
-name: Rust CLI Release
+name: Rust Build and Release
 
 on:
-  # 当一个新的 Tag (例如 v1.0.0) 被推送到仓库时触发
   push:
     tags:
-      - "v[0-9]+.*" # 匹配所有以 'v' 开头的版本标签
+      - "v*" # 仅在推送 v 开头的 tag 时触发
+
+permissions:
+  contents: write
+
+env:
+  # !!! 请在这里修改你的 Rust 项目名称 (即 Cargo.toml 中的 name 字段) !!!
+  BINARY_NAME: transfer
 
 jobs:
-  build_and_release:
-    name: Build & Release on ${{ matrix.os }}
+  build:
+    name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-
-    # 定义编译平台矩阵
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          # Linux
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: linux-amd64
+            # Linux 编译产物没有后缀
+            bin_suffix: ""
+
+          # Windows
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: windows-amd64
+            # Windows 编译产物有 .exe 后缀
+            bin_suffix: ".exe"
+
+          # macOS (Intel) - 如果需要 Apple Silicon，可增加 macos-14 和 aarch64 目标
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: macos-amd64
+            bin_suffix: ""
 
     steps:
-      - name: ⬇️ Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # ------------------------------------------------------------------
-      # 步骤 1：设置 Rust 编译环境
-      # ------------------------------------------------------------------
-      - name: 🛠️ Setup Rust environment
-        uses: actions-rs/toolchain@v1
+      # 安装 Rust 工具链 (社区推荐方式)
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          profile: minimal
-          override: true
+          targets: ${{ matrix.target }}
 
-      # ------------------------------------------------------------------
-      # 步骤 2：编译程序
-      # ------------------------------------------------------------------
-      - name: 🏗️ Compile CLI Tool (Release)
-        id: compile
+      # (可选) 缓存 Cargo 依赖，加速构建
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+
+      # 编译 Release 版本
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      # 准备产物：重命名文件以便上传
+      - name: Prepare artifact
         shell: bash
         run: |
-          VERSION=${{ github.ref_name }}
-          # 假设你的项目名在 Cargo.toml 中是 'mytool'
-          PROJECT_NAME="transfer"
+          mkdir -p build_assets
+          # 将原始二进制文件复制并重命名，例如：my-rust-app-linux-amd64
+          cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.bin_suffix }} build_assets/${{ env.BINARY_NAME }}-${{ matrix.artifact_name }}${{ matrix.bin_suffix }}
 
-          # 使用 --release 编译，生成优化的二进制文件
-          cargo build --release
+      # 上传处理好的文件到 GitHub Actions 临时存储
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BINARY_NAME }}-${{ matrix.artifact_name }}
+          path: build_assets/*
 
-          # 确定可执行文件路径和最终名称
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            EXECUTABLE_PATH="target/release/${PROJECT_NAME}.exe"
-            OUTPUT_NAME="${PROJECT_NAME}-${VERSION}-windows-x64.zip"
-          else
-            EXECUTABLE_PATH="target/release/${PROJECT_NAME}"
-            OUTPUT_NAME="${PROJECT_NAME}-${VERSION}-${{ matrix.os }}-x64.tar.gz"
-          fi
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release_assets
+          merge-multiple: true
 
-          # 设置输出变量
-          echo "project_name=${PROJECT_NAME}" >> $GITHUB_OUTPUT
-          echo "executable_path=${EXECUTABLE_PATH}" >> $GITHUB_OUTPUT
-          echo "output_name=${OUTPUT_NAME}" >> $GITHUB_OUTPUT
-
-      # ------------------------------------------------------------------
-      # 步骤 3：打包可执行文件
-      # ------------------------------------------------------------------
-      - name: 📦 Archive (Tar for Linux/macOS, Zip for Windows)
-        id: archive
-        shell: bash
-        run: |
-          OUTPUT_NAME=${{ steps.compile.outputs.output_name }}
-          EXECUTABLE_PATH=${{ steps.compile.outputs.executable_path }}
-          PROJECT_NAME=${{ steps.compile.outputs.project_name }}
-
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            # Windows 使用 zip
-            # 需要安装 zip 工具
-            # Add-Type -AssemblyName System.IO.Compression.FileSystem
-            # [System.IO.Compression.ZipFile]::CreateFromDirectory(".", "$OUTPUT_NAME")
-            # 使用 powershell 的 Compress-Archive
-            Compress-Archive -Path $EXECUTABLE_PATH -DestinationPath $OUTPUT_NAME
-          else
-            # Linux/macOS 使用 tar.gz
-            tar -czvf $OUTPUT_NAME -C "$(dirname $EXECUTABLE_PATH)" "$(basename $EXECUTABLE_PATH)"
-          fi
-
-          # 设置打包文件的路径供下一步上传使用
-          echo "asset_path=$OUTPUT_NAME" >> $GITHUB_OUTPUT
-          echo "asset_name=$OUTPUT_NAME" >> $GITHUB_OUTPUT
-
-      # ------------------------------------------------------------------
-      # 步骤 4：创建和上传 Release Assets
-      # ------------------------------------------------------------------
-      - name: 🚀 Upload Release Asset
-        uses: softprops/action-gh-release@v1
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
+          files: release_assets/*
+          generate_release_notes: true
           draft: false
           prerelease: false
-          files: ${{ steps.archive.outputs.asset_path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
