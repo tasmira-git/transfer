@@ -19,7 +19,7 @@ async fn main() {
             handle_send(args.target, &args.file).await;
         }
         Commands::Receive(args) => {
-            let addr = format!("127.0.0.1:{}", args.port);
+            let addr = format!("0.0.0.0:{}", args.port);
             handle_receive(addr, &args.output_dir).await;
         }
     }
