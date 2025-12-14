@@ -35,6 +35,7 @@ jobs:
       # ------------------------------------------------------------------
       - name: 🏗️ Compile CLI Tool (Release)
         id: compile
+        shell: bash
         run: |
           VERSION=${{ github.ref_name }}
           # 假设你的项目名在 Cargo.toml 中是 'mytool'
@@ -62,6 +63,7 @@ jobs:
       # ------------------------------------------------------------------
       - name: 📦 Archive (Tar for Linux/macOS, Zip for Windows)
         id: archive
+        shell: bash
         run: |
           OUTPUT_NAME=${{ steps.compile.outputs.output_name }}
           EXECUTABLE_PATH=${{ steps.compile.outputs.executable_path }}
